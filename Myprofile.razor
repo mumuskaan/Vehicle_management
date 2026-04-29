@@ -1,0 +1,261 @@
+@page "/my-profile"
+
+@using System.Net.Http.Json
+@using VehicleParts.Client.Services
+@inject HttpClient Http
+@inject AuthState Auth
+
+<h3>My Profile</h3>
+
+@if (!Auth.IsLoggedIn || Auth.Role != "Customer")
+{
+    <div class="alert alert-danger">
+        Access denied. This page is only for customers.
+    </div>
+}
+else if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+@if (customer == null)
+{
+    <p>Loading profile...</p>
+}
+else
+{
+    <div class="card p-3 mb-4">
+        <h5>Customer Details</h5>
+
+        <p><strong>Name:</strong> @customer.User?.FullName</p>
+        <p><strong>Email:</strong> @customer.User?.Email</p>
+        <p><strong>Phone:</strong> @customer.PhoneNumber</p>
+        <p><strong>Address:</strong> @customer.Address</p>
+        <p><strong>Credit Balance:</strong> Rs. @customer.CreditBalance</p>
+    </div>
+
+    <div class="card p-3 mb-4">
+        <h5>Vehicle Details</h5>
+
+        @if (customer.Vehicles == null || customer.Vehicles.Count == 0)
+        {
+            <p>No vehicle registered.</p>
+        }
+        else
+        {
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>Vehicle Number</th>
+                        <th>Brand</th>
+                        <th>Model</th>
+                        <th>Year</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var vehicle in customer.Vehicles)
+                    {
+                        <tr>
+                            <td>@vehicle.VehicleNumber</td>
+                            <td>@vehicle.Brand</td>
+                            <td>@vehicle.Model</td>
+                            <td>@vehicle.Year</td>
+                            <td>
+                                <button class="btn btn-warning btn-sm"
+                                        @onclick="() => EditVehicle(vehicle)">
+                                    Edit
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <div class="card p-3 mb-4">
+        <h5>Add New Vehicle</h5>
+
+        <div class="mb-2">
+            <label>Vehicle Number</label>
+            <input class="form-control" @bind="newVehicle.VehicleNumber" />
+        </div>
+
+        <div class="mb-2">
+            <label>Brand</label>
+            <input class="form-control" @bind="newVehicle.Brand" />
+        </div>
+
+        <div class="mb-2">
+            <label>Model</label>
+            <input class="form-control" @bind="newVehicle.Model" />
+        </div>
+
+        <div class="mb-2">
+            <label>Year</label>
+            <input class="form-control" type="number" @bind="newVehicle.Year" />
+        </div>
+
+        <button class="btn btn-primary" @onclick="AddVehicle">
+            Add Vehicle
+        </button>
+    </div>
+
+    @if (selectedVehicle != null)
+    {
+        <div class="card p-3">
+            <h5>Edit Vehicle</h5>
+
+            <div class="mb-2">
+                <label>Vehicle Number</label>
+                <input class="form-control" @bind="selectedVehicle.VehicleNumber" />
+            </div>
+
+            <div class="mb-2">
+                <label>Brand</label>
+                <input class="form-control" @bind="selectedVehicle.Brand" />
+            </div>
+
+            <div class="mb-2">
+                <label>Model</label>
+                <input class="form-control" @bind="selectedVehicle.Model" />
+            </div>
+
+            <div class="mb-2">
+                <label>Year</label>
+                <input class="form-control" type="number" @bind="selectedVehicle.Year" />
+            </div>
+
+            <button class="btn btn-success me-2" @onclick="UpdateVehicle">
+                Update Vehicle
+            </button>
+
+            <button class="btn btn-secondary" @onclick="CancelEdit">
+                Cancel
+            </button>
+        </div>
+    }
+}
+
+@code {
+    private string message = string.Empty;
+
+    private CustomerDto? customer;
+    private VehicleDto? selectedVehicle;
+
+    private VehicleDto newVehicle = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!Auth.IsLoggedIn || Auth.Role != "Customer")
+            return;
+
+        await LoadProfile();
+    }
+
+    private async Task LoadProfile()
+    {
+        customer = await Http.GetFromJsonAsync<CustomerDto>(
+            $"api/customers/{Auth.CustomerId}"
+        );
+    }
+
+    private async Task AddVehicle()
+    {
+        message = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(newVehicle.VehicleNumber))
+        {
+            message = "Vehicle number is required.";
+            return;
+        }
+
+        newVehicle.CustomerId = Auth.CustomerId;
+
+        var response = await Http.PostAsJsonAsync("api/vehicles", newVehicle);
+
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Vehicle added successfully.";
+            newVehicle = new VehicleDto();
+            await LoadProfile();
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    private void EditVehicle(VehicleDto vehicle)
+    {
+        selectedVehicle = new VehicleDto
+        {
+            Id = vehicle.Id,
+            CustomerId = Auth.CustomerId,
+            VehicleNumber = vehicle.VehicleNumber,
+            Brand = vehicle.Brand,
+            Model = vehicle.Model,
+            Year = vehicle.Year
+        };
+
+        message = "Editing selected vehicle.";
+    }
+
+    private async Task UpdateVehicle()
+    {
+        message = string.Empty;
+
+        if (selectedVehicle == null)
+            return;
+
+        var response = await Http.PutAsJsonAsync(
+            $"api/vehicles/{selectedVehicle.Id}",
+            selectedVehicle
+        );
+
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Vehicle updated successfully.";
+            selectedVehicle = null;
+            await LoadProfile();
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    private void CancelEdit()
+    {
+        selectedVehicle = null;
+        message = string.Empty;
+    }
+
+    public class CustomerDto
+    {
+        public int Id { get; set; }
+        public UserDto? User { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+        public decimal CreditBalance { get; set; }
+        public List<VehicleDto> Vehicles { get; set; } = new();
+    }
+
+    public class UserDto
+    {
+        public string FullName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+    }
+
+    public class VehicleDto
+    {
+        public int Id { get; set; }
+        public int CustomerId { get; set; }
+        public string VehicleNumber { get; set; } = string.Empty;
+        public string Brand { get; set; } = string.Empty;
+        public string Model { get; set; } = string.Empty;
+        public int Year { get; set; }
+    }
+}
