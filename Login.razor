@@ -1,0 +1,140 @@
+@page "/login"
+
+@using System.Net.Http.Json
+@using VehicleParts.Client.Services
+@inject NavigationManager Nav
+@inject AuthState Auth
+@inject HttpClient Http
+
+<h3>Login</h3>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-danger">@message</div>
+}
+
+<div class="card p-4" style="max-width: 450px;">
+
+    <div class="mb-3">
+        <label>Email</label>
+        <input class="form-control" @bind="login.Email" />
+    </div>
+
+    <div class="mb-3">
+        <label>Password</label>
+        <input class="form-control"
+               type="password"
+               @bind="login.Password" />
+    </div>
+
+    <button class="btn btn-primary w-100"
+            @onclick="LoginUser">
+        Login
+    </button>
+
+    <hr />
+
+    <p class="text-muted mb-2">
+        New customer?
+    </p>
+
+    <button class="btn btn-outline-secondary w-100"
+            @onclick="GoToCustomerRegister">
+        Register as Customer
+    </button>
+
+    <button class="btn btn-outline-primary w-100 mt-2"
+            @onclick="GoToStaffManagement">
+        Staff/Admin Registration
+    </button>
+
+    <p class="text-muted mt-3 small">
+        Use Staff/Admin Registration to create demo staff or admin accounts.
+    </p>
+
+</div>
+
+@code {
+
+    private string message = string.Empty;
+
+    private LoginDto login = new();
+
+    private async Task LoginUser()
+    {
+        message = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(login.Email) ||
+            string.IsNullOrWhiteSpace(login.Password))
+        {
+            message = "Email and password are required.";
+            return;
+        }
+
+        var response =
+            await Http.PostAsJsonAsync(
+                "api/auth/login",
+                login);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            message = "Invalid login details.";
+            return;
+        }
+
+        var result =
+            await response.Content
+                .ReadFromJsonAsync<LoginResponseDto>();
+
+        if (result == null)
+        {
+            message = "Login failed.";
+            return;
+        }
+
+        Auth.Login(
+            result.UserId,
+            result.CustomerId,
+            result.FullName,
+            result.Email,
+            result.Role
+        );
+
+        if (result.Role == "Admin")
+            Nav.NavigateTo("/");
+        else if (result.Role == "Staff")
+            Nav.NavigateTo("/sales-invoices");
+        else
+            Nav.NavigateTo("/my-history");
+    }
+
+    private void GoToCustomerRegister()
+    {
+        Nav.NavigateTo("/customers");
+    }
+
+    private void GoToStaffManagement()
+    {
+        Nav.NavigateTo("/staff");
+    }
+
+    public class LoginDto
+    {
+        public string Email { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+    }
+
+    public class LoginResponseDto
+    {
+        public int UserId { get; set; }
+
+        public int CustomerId { get; set; }
+
+        public string FullName { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        public string Role { get; set; } = string.Empty;
+    }
+}
