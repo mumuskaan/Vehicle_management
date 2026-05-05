@@ -1,0 +1,221 @@
+@page "/vendors"
+
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<h3>Vendor Management</h3>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<div class="card p-3 mb-4">
+    <h5>@(isEditing ? "Update Vendor" : "Add Vendor")</h5>
+
+    <div class="mb-2">
+        <label>Vendor Name</label>
+        <input class="form-control" @bind="vendor.VendorName" />
+    </div>
+
+    <div class="mb-2">
+        <label>Contact Person</label>
+        <input class="form-control" @bind="vendor.ContactPerson" />
+    </div>
+
+    <div class="mb-2">
+        <label>Phone Number</label>
+        <input class="form-control" @bind="vendor.PhoneNumber" />
+    </div>
+
+    <div class="mb-2">
+        <label>Email</label>
+        <input class="form-control" @bind="vendor.Email" />
+    </div>
+
+    <div class="mb-2">
+        <label>Address</label>
+        <input class="form-control" @bind="vendor.Address" />
+    </div>
+
+    @if (isEditing)
+    {
+        <button class="btn btn-success me-2" @onclick="UpdateVendor">
+            Update Vendor
+        </button>
+
+        <button class="btn btn-secondary" @onclick="CancelEdit">
+            Cancel
+        </button>
+    }
+    else
+    {
+        <button class="btn btn-primary" @onclick="CreateVendor">
+            Add Vendor
+        </button>
+    }
+</div>
+
+<h5>Vendor List</h5>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Vendor</th>
+            <th>Contact Person</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Address</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        @foreach (var item in vendors)
+        {
+            <tr>
+                <td>@item.Id</td>
+                <td>@item.VendorName</td>
+                <td>@item.ContactPerson</td>
+                <td>@item.PhoneNumber</td>
+                <td>@item.Email</td>
+                <td>@item.Address</td>
+                <td>
+                    <button class="btn btn-warning btn-sm me-1"
+                            @onclick="() => EditVendor(item)">
+                        Edit
+                    </button>
+
+                    <button class="btn btn-danger btn-sm"
+                            @onclick="() => DeleteVendor(item.Id)">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private string message = string.Empty;
+
+    private VendorDto vendor = new();
+    private List<VendorDto> vendors = new();
+
+    private bool isEditing = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadVendors();
+    }
+
+    private async Task LoadVendors()
+    {
+        vendors = await Http.GetFromJsonAsync<List<VendorDto>>("api/vendors") ?? new();
+    }
+
+    private async Task CreateVendor()
+    {
+        message = string.Empty;
+
+        if (string.IsNullOrWhiteSpace(vendor.VendorName))
+        {
+            message = "Vendor name is required.";
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/vendors", vendor);
+
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Vendor added successfully.";
+            vendor = new VendorDto();
+            await LoadVendors();
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    private void EditVendor(VendorDto selectedVendor)
+    {
+        isEditing = true;
+
+        vendor = new VendorDto
+        {
+            Id = selectedVendor.Id,
+            VendorName = selectedVendor.VendorName,
+            ContactPerson = selectedVendor.ContactPerson,
+            PhoneNumber = selectedVendor.PhoneNumber,
+            Email = selectedVendor.Email,
+            Address = selectedVendor.Address
+        };
+
+        message = "Editing selected vendor.";
+    }
+
+    private async Task UpdateVendor()
+    {
+        message = string.Empty;
+
+        if (vendor.Id == 0)
+        {
+            message = "No vendor selected for update.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(vendor.VendorName))
+        {
+            message = "Vendor name is required.";
+            return;
+        }
+
+        var response = await Http.PutAsJsonAsync($"api/vendors/{vendor.Id}", vendor);
+
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Vendor updated successfully.";
+            vendor = new VendorDto();
+            isEditing = false;
+            await LoadVendors();
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        vendor = new VendorDto();
+        message = string.Empty;
+    }
+
+    private async Task DeleteVendor(int id)
+    {
+        var response = await Http.DeleteAsync($"api/vendors/{id}");
+
+        if (response.IsSuccessStatusCode)
+        {
+            message = "Vendor deleted successfully.";
+            await LoadVendors();
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    public class VendorDto
+    {
+        public int Id { get; set; }
+        public string VendorName { get; set; } = string.Empty;
+        public string ContactPerson { get; set; } = string.Empty;
+        public string PhoneNumber { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Address { get; set; } = string.Empty;
+    }
+}
