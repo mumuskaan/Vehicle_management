@@ -1,0 +1,207 @@
+@page "/sales-invoices"
+
+@using System.Net.Http.Json
+@inject HttpClient Http
+
+<h3>Sales Invoice</h3>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert alert-info">@message</div>
+}
+
+<div class="card p-3 mb-3">
+    <h5>Create Sales Invoice</h5>
+
+    <div class="mb-2">
+        <label>Customer</label>
+        <select class="form-control" @bind="invoice.CustomerId">
+            <option value="0">-- Select Customer --</option>
+            @foreach (var customer in customers)
+            {
+                <option value="@customer.Id">
+                    @customer.User?.FullName (@customer.PhoneNumber)
+                </option>
+            }
+        </select>
+    </div>
+
+    <div class="mb-2">
+        <label>Part</label>
+        <select class="form-control" @bind="selectedPartId">
+            <option value="0">-- Select Part --</option>
+            @foreach (var part in parts)
+            {
+                <option value="@part.Id">
+                    @part.PartName - Rs. @part.SellingPrice | Stock: @part.StockQuantity
+                </option>
+            }
+        </select>
+    </div>
+
+    <div class="mb-2">
+        <label>Quantity</label>
+        <input class="form-control" type="number" @bind="quantity" />
+    </div>
+
+    <div class="mb-2">
+        <label>
+            <input type="checkbox" @bind="invoice.IsCredit" />
+            Credit Sale
+        </label>
+    </div>
+
+    <button class="btn btn-primary" @onclick="CreateInvoice">Create Invoice</button>
+</div>
+
+@if (createdInvoice != null)
+{
+    <div class="card p-3 mb-3">
+        <h5>Invoice Created</h5>
+        <p><strong>Invoice ID:</strong> @createdInvoice.Invoice.Id</p>
+        <p><strong>Subtotal:</strong> Rs. @createdInvoice.Invoice.SubTotal</p>
+        <p><strong>Discount:</strong> Rs. @createdInvoice.Invoice.DiscountAmount</p>
+        <p><strong>Grand Total:</strong> Rs. @createdInvoice.Invoice.GrandTotal</p>
+        <p><strong>Credit:</strong> @createdInvoice.Invoice.IsCredit</p>
+        <p><strong>Paid:</strong> @createdInvoice.Invoice.IsPaid</p>
+    </div>
+}
+
+<h5>Available Parts</h5>
+
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Part</th>
+            <th>Price</th>
+            <th>Stock</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var part in parts)
+        {
+            <tr>
+                <td>@part.PartName</td>
+                <td>@part.SellingPrice</td>
+                <td>@part.StockQuantity</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<CustomerDto> customers = new();
+    private List<PartDto> parts = new();
+
+    private CreateSalesInvoiceDto invoice = new();
+    private int selectedPartId;
+    private int quantity = 1;
+
+    private string message = string.Empty;
+    private SalesInvoiceResponse? createdInvoice;
+
+    protected override async Task OnInitializedAsync()
+    {
+        customers = await Http.GetFromJsonAsync<List<CustomerDto>>("api/customers") ?? new();
+        parts = await Http.GetFromJsonAsync<List<PartDto>>("api/parts") ?? new();
+    }
+
+    private async Task CreateInvoice()
+    {
+        message = string.Empty;
+        createdInvoice = null;
+
+        if (invoice.CustomerId == 0)
+        {
+            message = "Please select a customer.";
+            return;
+        }
+
+        if (selectedPartId == 0)
+        {
+            message = "Please select a part.";
+            return;
+        }
+
+        if (quantity <= 0)
+        {
+            message = "Quantity must be greater than zero.";
+            return;
+        }
+
+        invoice.Items = new List<CreateSalesInvoiceItemDto>
+        {
+            new CreateSalesInvoiceItemDto
+            {
+                PartId = selectedPartId,
+                Quantity = quantity
+            }
+        };
+
+        var response = await Http.PostAsJsonAsync("api/salesinvoices", invoice);
+
+        if (response.IsSuccessStatusCode)
+        {
+            createdInvoice = await response.Content.ReadFromJsonAsync<SalesInvoiceResponse>();
+            message = "Sales invoice created successfully.";
+
+            parts = await Http.GetFromJsonAsync<List<PartDto>>("api/parts") ?? new();
+
+            invoice = new CreateSalesInvoiceDto();
+            selectedPartId = 0;
+            quantity = 1;
+        }
+        else
+        {
+            message = await response.Content.ReadAsStringAsync();
+        }
+    }
+
+    public class CreateSalesInvoiceDto
+    {
+        public int CustomerId { get; set; }
+        public bool IsCredit { get; set; }
+        public List<CreateSalesInvoiceItemDto> Items { get; set; } = new();
+    }
+
+    public class CreateSalesInvoiceItemDto
+    {
+        public int PartId { get; set; }
+        public int Quantity { get; set; }
+    }
+
+    public class CustomerDto
+    {
+        public int Id { get; set; }
+        public UserDto? User { get; set; }
+        public string PhoneNumber { get; set; } = string.Empty;
+    }
+
+    public class UserDto
+    {
+        public string FullName { get; set; } = string.Empty;
+    }
+
+    public class PartDto
+    {
+        public int Id { get; set; }
+        public string PartName { get; set; } = string.Empty;
+        public decimal SellingPrice { get; set; }
+        public int StockQuantity { get; set; }
+    }
+
+    public class SalesInvoiceResponse
+    {
+        public SalesInvoiceDto Invoice { get; set; } = new();
+    }
+
+    public class SalesInvoiceDto
+    {
+        public int Id { get; set; }
+        public decimal SubTotal { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public decimal GrandTotal { get; set; }
+        public bool IsCredit { get; set; }
+        public bool IsPaid { get; set; }
+    }
+}
